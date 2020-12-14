@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as clr
 from matplotlib import cm
-#import kappa_fitting
 plt.rcParams["font.family"] = "serif"
 plt.rcParams["font.size"] = 14
 import pickle
@@ -13,18 +12,16 @@ from matplotlib import colors
 from matplotlib import gridspec
 from astropy.io import fits
 import matplotlib.ticker as ticker
+
 # get the bottom left of images x and y coords
-
-
-hdu = fits.open("crisp_data.fits")
+hdu = fits.open("crisp_l2_20140906_152724_8542_r00470.fits")
 header = hdu[0].header
 bl_x = header['CRVAL1'] + (0 - header['CRPIX1'])*header['CDELT1']
 bl_y = header['CRVAL2'] + (0 - header['CRPIX2'])*header['CDELT2']
-print(bl_x,bl_y)
-
 hdu.close()
+
 # ---- set up contours for umbra  ---- #
-one = pickle.load(open("preferred_crisp_all_bump/pref_ca8542_12_post.p","rb"))
+one = pickle.load(open("pref_results.p","rb"))
 
 cont = np.load("cube_ca8542_00_post_0.1res.npy")
 cont = cont[0,:,:]
@@ -39,9 +36,17 @@ conts[cont<levels[0]]=0
 conts[cont>levels[1]]=2
 conts[one==0]=np.nan # pixels out of FOV set to nan
 
+#  ----- flare feet contours - added 20201202 ----- #
+
+contf = np.load("ca8542_12_post.npy")
+contf = contf[0,:,:]
+contf = contf/np.max(contf)
+footcolors = colors.ListedColormap(clrs[6])
+contf[one==0]=np.nan
+
 cmap = 'viridis'
 
-line="Halpha"
+line="ca8542"
 time = 'post'
 if line=="ca8542":
     wls = [8,10,12,14,16] # can change
@@ -54,7 +59,7 @@ elif line=="Halpha":
     rows,cols=1,5
     d_wl = 0.2
     wl0 = 7
-    title = "H-alpha %s-impulsive, Gaussian bump peaks"%(time)
+    title = "H\u03B1 %s-impulsive, Gaussian bump peaks"%(time)
 
 # ---- multiple plots on a gridspec ---- #
 sizefactor = 3
@@ -72,13 +77,14 @@ clip_bottom = 10
 clip_top    = 40
 scale=0.57
 conts = conts[clip_top:-clip_bottom,clip_left:-clip_right]
+contf = contf[clip_top:-clip_bottom,clip_left:-clip_right]
 
 # loop through wavelength points and add each to the gridspec
 for a in range(rows*cols):
     wl = wls[a]
     ax1 = plt.subplot(gs1[a])
-    path_bump = "results_crisp_all/%s_%s_%s.p"%(line,str(wl).zfill(2),time)
-    path_pref = "preferred_crisp_all_bump/pref_%s_%s_%s.p"%(line,str(wl).zfill(2),time)
+    path_bump = "parameter_results.p"%(line,str(wl).zfill(2),time)
+    path_pref = "pref_results.p"%(line,str(wl).zfill(2),time)
     loaded_results = pickle.load(open(path_bump,"rb"))
     loaded_pref = pickle.load(open(path_pref,"rb"))
 
@@ -100,7 +106,10 @@ for a in range(rows*cols):
 
     bump = np.e**(-bump) # convert to period (s)
     plt.contour(conts,origin='lower',levels=[0,1,2,3],cmap=contourcolors,linewidths=0.6,linestyles=[':','-'],extent=extent)
+    plt.contourf(contf,extent=extent,origin='lower',levels=[0.55,1],cmap=footcolors,alpha=0.5)
+    #plt.contour(contf,extent=extent,origin='lower',levels=[0.55,1],cmap=footcolors,linewidths=0.8,linestyles=['-.'])
     im = plt.imshow(bump, origin='lower', cmap=cmap, extent=extent, vmin=100, vmax = 300)
+    
     plt.axis('on')
 #---------------------------
     # set up ticks, labels
@@ -155,28 +164,10 @@ upper = 3
 lower = 1
 N = 3
 norm = clr.Normalize()
-
 mapper = cm.ScalarMappable(norm=norm, cmap=cmap)
-
 deltac = (upper-lower)/(2*(N-1))
 clb = plt.colorbar(cax=cax)
 clb.set_label("Period [s]", rotation=270,labelpad=18,fontsize=12)
-
-
-#plt.show()
-plt.savefig("peaks_%s_%s.pdf"%(line,time),dpi=400,bbox_inches='tight')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+clb.set_ticks([100,200,300])
+clb.set_ticklabels(['100','200','>300'])
+plt.show()
