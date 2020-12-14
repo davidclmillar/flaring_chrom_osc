@@ -28,7 +28,7 @@ conts[cont>levels[1]]=2
 rows,cols=2,2
 sizefactor=4
 f = plt.figure(figsize = (cols*sizefactor,rows*sizefactor))
-# shidts to apply due to solar rotation, calculated from sunpy solar rotation package
+# shifts to apply due to solar rotation, calculated from sunpy solar rotation package
 x_shift = -3.7184
 y_shift =  0.9548
 
@@ -37,7 +37,6 @@ hdu = fits.open("crisp_l2_20140906_152724_8542_r00470.fits")
 header = hdu[0].header
 bl_x = header['CRVAL1'] + (0 - header['CRPIX1'])*header['CDELT1']
 bl_y = header['CRVAL2'] + (0 - header['CRPIX2'])*header['CDELT2']
-
 
 # read in aia
 aia1hdu = fits.open("aia_submap_1700a_2014_09_06t16_14_06_72z_image_lev1.fits")
@@ -49,11 +48,11 @@ aia1_bl_y = header['CRVAL2'] + (0 - header['CRPIX2'])*header['CDELT2']
 aia_bl_x = aia1_bl_x - x_shift
 aia_bl_y = aia1_bl_y - y_shift
 
-files = ["aia_pref/%s_%s_pref.p"%(wl, time) for wl,time in zip(["1600","1600","1700","1700"],["pre","post","pre","post"])]
+files = ["pref_%s_%s.p"%(wl, time) for wl,time in zip(["1600","1600","1700","1700"],["pre","post","pre","post"])]
 
 gs1 = gridspec.GridSpec(rows, cols,wspace=0.15,hspace=0.15)
 gs1.tight_layout(f, renderer=None, pad=1, h_pad=1, w_pad=1)
-cmap = colors.ListedColormap([clrs[0],clrs[4],clrs[8]])
+cmap = colors.ListedColormap([clrs[0],clrs[1],clrs[9]])
 
 clip_size=10
 scale = 0.6
@@ -62,9 +61,15 @@ clip = clip_size*scale # this is in arcsec and is the same for both
 hmi_scale = 0.504
 clip_size_hmi = round(clip/0.504)
 
+# footpoint contours
+feet = np.load("1700_post_datacube.npy")[0,:,:]
+feet = feet/np.max(feet)
+feet = feet[clip_size:,0:-clip_size]
+feetcolors = colors.ListedColormap(clrs[6])
+
 #clip edges off
 conts= conts[clip_size_hmi:,0:-clip_size_hmi]
-
+c=0
 # load in each and plot on grid
 for a in range(rows*cols):
     ax1 = plt.subplot(gs1[a])
@@ -86,7 +91,7 @@ for a in range(rows*cols):
     extent_hmi = [left_hmi, right_hmi, bottom_hmi, top_hmi]
     plt.imshow(pref,origin='lower',cmap=cmap,extent=extent)
     plt.contour(conts,origin='lower',levels=[0,1,2,3],cmap=contourcolors,linewidths=0.6,linestyles=[':','-'],extent=extent_hmi)
-
+    plt.contourf(feet,origin='lower',levels=[0.15,1],cmap=feetcolors,extent=extent,alpha=0.4)
     # ticks
     k = cols*(rows - 1)- 1
 
@@ -115,13 +120,16 @@ for a in range(rows*cols):
     ax1.yaxis.set_major_locator(MultipleLocator(20))
     ax1.yaxis.set_minor_locator(MultipleLocator(10))
 
-    blip = path[18:-7]
-    if blip=="pre":
-
-        ax1.set_title(path[13:17]+u" \u212B "+blip +"-flare",color='k',fontsize=12)
+    if c==0:
+        ax1.set_title(u"1600 \u212B pre-flare",color='k',fontsize=12)
+    elif c==1:
+        ax1.set_title(u"1600 \u212B post-impulsive",color='k',fontsize=12)
+    elif c==2:
+        ax1.set_title(u"1700 \u212B pre-flare",color='k',fontsize=12)
     else:
-        ax1.set_title(path[13:17]+u" \u212B "+blip +"-impulsive",color='k',fontsize=12)
-
+        ax1.set_title(u"1700 \u212B post-impulsive",color='k',fontsize=12)
+    
+    c+=1
 # - add cbar
 cax = f.add_axes([0.92, 0.25, 0.02, 0.5])
 upper = 3
@@ -137,8 +145,5 @@ deltac = (upper-lower)/(2*(N-1))
 mapper.set_array(np.linspace(lower-deltac,upper+deltac,10))
 clb = f.colorbar(mapper, shrink=0.19, cax=cax,ticks=[1,2,3])
 clb.ax.set_yticklabels(['M1','M2','M3'])
-clb.ax.tick_params(size=0)#rotation=270,size=0)
-#plt.show()
-plt.savefig("aia_prefer.pdf",dpi=400,bbox_inches='tight')
-
-
+clb.ax.tick_params(size=0)
+plt.show()
