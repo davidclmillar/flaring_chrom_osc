@@ -1,5 +1,3 @@
-
-
 import numpy as np
 import matplotlib.pyplot as plt
 import kappa_fitting
@@ -12,28 +10,25 @@ from datetime import datetime,timedelta
 import seaborn as sns
 palette = sns.set_palette("colorblind")
 clrs = sns.color_palette(palette)
-# set time axis
+
 start_time = datetime(2014,9,6,16,58,3,844000)
 times = [start_time + timedelta(seconds=11.6*x) for x in range(148)]
 x_vals = dates.date2num(times)
 myFmt = dates.DateFormatter('%H:%M')
 
-# choose macropixel
-row, col = 85, 43
+row,col =81, 38
+
 datacube= np.load("cube_ca8542_12_post_0.1res.npy")
 
 s = datacube[:,row, col]
 x = timeseries(s)
 
-# run the fit
 result = x.fit_M2(plot=False)
 popt = result[0]
 
-
-# plot
 f, ax = plt.subplots(1,2,figsize=(12,4))
-f.suptitle('Timeseries and PSD best described by M2. Ca II 8542 $\pm$0.0\u212B',y=0.98)
 
+f.suptitle('Timeseries and PSD best described by M2. Ca II 8542 $\pm$0.0\u212B',y=0.98)
 
 ax[0].plot_date(x_vals,x.normalised, linestyle='-',marker=None,color='k')#,color=clrs[2])
 ax[0].set_xlabel('2014-09-06')
@@ -56,6 +51,4 @@ ax[1].plot(1/x.freqs,m*modelk(x.freqs,*(popt*[1,1,0,1,1,1])),label='99.9%',lines
 ax[1].legend()
 
 plt.subplots_adjust(wspace=0.25)
-plt.savefig("gauss_example_new.pdf",dpi=400,bbox_inches='tight')
-
-#plt.show()
+plt.show()
