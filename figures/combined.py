@@ -2,6 +2,8 @@ import numpy as np
 import pickle
 from astropy.io import fits
 import sunpy.map as mp
+import astropy.units as u
+from astropy.coordinates import SkyCoord
 import matplotlib.pyplot as plt
 from reproject import reproject_interp
 import matplotlib.colors as clr
@@ -14,10 +16,11 @@ clrs = sns.color_palette(palette)
 from matplotlib import colors
 from matplotlib import gridspec
 from matplotlib.ticker import MultipleLocator
+
 # load a crisp fits file and alter header for the isolated wavelength point
-crisp_fits = fits.open("file_load")
+crisp_file = "crisp_l2_20140906_152724_8542_r00470.fits"
+crisp_fits = fits.open(crisp_file)
 header = crisp_fits[0].header
-crisp_fits.close()
 
 bl_x = header['CRVAL1'] + (0 - header['CRPIX1'])*header['CDELT1']
 bl_y = header['CRVAL2'] + (0 - header['CRPIX2'])*header['CDELT2']
@@ -48,101 +51,82 @@ del header['CTYPE3']
 del header['PC3_3']
 
 #load preferred models results and turn into a map object
-pref_data = pickle.load(open("folder/pref_ca8542_10_post.p","rb"))
-pref_data[pref_data!=2]=0
-pref_map = mp.Map(pref_data,header)
-
+pref_data1 = pickle.load(open("pref_ca8542_10_post.p","rb"))
+pref_data2 = pickle.load(open("pref_ca8542_10_pre.p","rb"))
+pref_data1[pref_data1!=2]=0
+pref_data2[pref_data2!=2]=0
+pref_map1 = mp.Map(pref_data1,header)
+pref_map2 = mp.Map(pref_data2,header)
 
 # similar as above but for an intensity image for the footpoints
-foot_fits = fits.open("")
-footheader = foot_fits[0].header
-footdata   = foot_fits[0].data[12,:-8,:-3]
+foot_data = np.load("ca8542_12_post.npy")
+foot_data = foot_data[0,:,:]
+foot_data = foot_data/np.max(foot_data)
+footheader = header
 
-footheader['NAXIS']=2
-footheader['PC1_2']=0.0
-footheader['PC2_1']=0.0
-footheader['DATE-OBS']=footheader['DATE-AVG']
-
-del footheader['NAXIS3']
-del footheader['CDELT3']
-del footheader['CRPIX3']
-del footheader['CRVAL3']
-del footheader['CUNIT3']
-del footheader['WSTART1']
-del footheader['WWIDTH1']
-del footheader['WDESC1']
-del footheader['TWAVE1']
-del footheader['CTYPE3']
-del footheader['PC3_3']
 
 # make it a map
-foot_map = mp.Map(footdata,footheader)
+foot_map = mp.Map(foot_data,footheader)
 
-# load in hmi submap
-hmi_map = mp.Map("location/hmi172630submap.fits")
-hmi_fits = fits.open("location/hmi172630submap.fits")
+
+#load in wing data for umbra lines
+um_data = np.load("cube_ca8542_00_post_0.1res.npy")
+um_data = um_data[0,:,:]
+um_data = um_data/np.max(um_data)
+umheader = header
+
+um_map = mp.Map(um_data,umheader)
+
+
 # load in aia submap
-aia_map = mp.Map("location/aia172630submap.fits")
-
-# plot to see originals
-#f = plt.figure(figsize=(15,15))
-#ax1 = f.add_subplot(2,2,1,projection = aia_map)
-#ax2 = f.add_subplot(2,2,2,projection = hmi_map)
-#ax3 = f.add_subplot(2,2,3,projection = pref_map)
-#ax4 = f.add_subplot(2,2,4,projection = foot_map)
-#aia_map.plot(axes=ax1)
-#hmi_map.plot(axes=ax2)
-#pref_map.plot(axes=ax3)
-#foot_map.plot(axes=ax4)
-#plt.show()
+aia_map1 = mp.Map("pre_171x.fits")
+aia_map2 = mp.Map("post_171x.fits")
 
 # reproject pref, foot and hmi onto aia plane
 #pref
-y, footprint = reproject_interp((pref_data,header), aia_map.wcs, aia_map.data.shape)
+y1, footprint = reproject_interp((pref_data1, header), aia_map1.wcs, aia_map1.data.shape)
 #clean up pref result
-y = np.nan_to_num(y,0)
-y[y>0.9]=1
-y[y!=1]=np.nan
-#hmi
-outputhmi, footprinthmi = reproject_interp((hmi_fits[0].data, hmi_fits[0].header), aia_map.wcs, aia_map.data.shape)
+y1 = np.nan_to_num(y1,0)
+y1[y1>0.9]=1
+y1[y1!=1]=np.nan
+
+y2, footprint = reproject_interp((pref_data2, header), aia_map1.wcs, aia_map1.data.shape)
+#clean up pref result
+y2 = np.nan_to_num(y2,0)
+y2[y2>0.9]=1
+y2[y2!=1]=np.nan
+
+#wing
+outputum, footprintum = reproject_interp((um_data, umheader), aia_map1.wcs, aia_map1.data.shape)
 #foot
-footout, footfootprint = reproject_interp((footdata,footheader), aia_map.wcs, aia_map.data.shape)
+footout, footfootprint = reproject_interp((foot_data,footheader), aia_map1.wcs, aia_map1.data.shape)
 #make into maps
-out_pref = mp.Map(y,aia_map.wcs)
-out_hmi = mp.Map(outputhmi,aia_map.wcs)
-out_foot = mp.Map(footout, aia_map.wcs)
+out_pref1 = mp.Map(y1,aia_map1.wcs)
+out_pref2 = mp.Map(y2,aia_map1.wcs)
+out_um = mp.Map(outputum,aia_map1.wcs)
+out_foot = mp.Map(footout, aia_map1.wcs)
 
-#plot reprojections
-#print("Reprojected images")
+#----------------------
+# --- make combined plot!
+#----------------------
 
-#f = plt.figure(figsize=(15,15))
-#ax1 = f.add_subplot(2,2,1,projection = aia_map)
-#ax2 = f.add_subplot(2,2,2,projection = out_hmi)
-#ax3 = f.add_subplot(2,2,3,projection = out_pref)
-#ax4 = f.add_subplot(2,2,4,projection = out_foot)
-#aia_map.plot(axes=ax1)
-#out_hmi.plot(axes=ax2)
-#out_pref.plot(axes=ax3)
-#out_foot.plot(axes=ax4)
-#plt.show()
-
-#make combined plot!
-
-aiacmap = "your_fave_cmap"
-contourcolors = colors.ListedColormap(clrs[3])
-footcolors =  colors.ListedColormap(clrs[2],clrs[2])
+aiacmap = pickle.load(open("aia171cmap.p","rb"))
+contourcolors = colors.ListedColormap('w')
+footcolors =  colors.ListedColormap(clrs[2])
 footplt = out_foot.data
 footplt = np.nan_to_num(footplt,0)
 
 # umbra contours
-levels=[0.4]
-cont = out_hmi.data
+cont = out_um.data
 cont=np.nan_to_num(cont,0)
-cont = cont/np.max(cont)
-conts = np.ones_like(cont)
-conts[cont<levels[0]]=0
+conts = cont/np.max(cont)
+m = np.zeros_like(conts)
+m[60:-70,60:-70]=1
+conts=m*conts
+conts[conts==0]=np.nan
 
-im171 = aia_map.data
+im1711 = aia_map1.data
+im1712 = aia_map2.data
 clip = 15 #no. of clip pixels off the edges
 scale = 0.599489 # arcsec per pix
 reduction = scale*clip
@@ -150,27 +134,40 @@ reduction = scale*clip
 # this extent lines all features up with previous plots
 extent = [-786.7816 + reduction, -667.9816 - reduction, -370.2548 + reduction, -250.8548 - reduction]
 
-new_pref = out_pref.data
+new_pref1 = out_pref1.data
+new_pref2 = out_pref2.data
 prefcolors = colors.ListedColormap([clrs[4],clrs[4]])
 
-f, ax1 = plt.subplots(figsize=(12,12))
-im171 = im171[clip:-clip,clip:-clip]
-new_pref = new_pref[clip:-clip,clip:-clip]
+
+# start plotting
+f, [ax1, ax2] = plt.subplots(1,2,figsize=(20,15))
+im1711 = im1711[clip:-clip,clip:-clip]
+im1712 = im1712[clip:-clip,clip:-clip]
+new_pref1 = new_pref1[clip:-clip,clip:-clip]
+new_pref2 = new_pref2[clip:-clip,clip:-clip]
 conts = conts[clip:-clip,clip:-clip]
 footplt = footplt[clip:-clip,clip:-clip]
 
-plt.imshow(np.log2(im171),origin='lower',extent=extent,cmap=aiacmap,vmin=7.5,vmax=11)
-plt.imshow(new_pref,origin='lower',cmap=prefcolors, extent=extent)
-#plt.colorbar()
-plt.contour(conts, origin='lower', levels=[0,1,2], extent=extent, cmap=contourcolors)
-plt.contourf(footplt/np.max(footplt),extent=extent,origin='lower',levels=[0.7,1],cmap=footcolors,alpha=0.8)
+ax1.imshow(np.log2(im1711),origin='lower',extent=extent,cmap=aiacmap,vmax=12)
+ax1.imshow(new_pref2,origin='lower',cmap=prefcolors, extent=extent)
+ax1.contour(conts, origin='lower', levels=[0.4], extent=extent, cmap=contourcolors)
+ax1.contour(footplt/np.max(footplt),extent=extent,origin='lower',levels=[0.55],cmap=contourcolors,linestyles='--')
 ax1.set_xlabel("Solar X [arcsec]")
 ax1.set_ylabel("Solar Y [arcsec]")
 ax1.xaxis.set_major_locator(MultipleLocator(20))
 ax1.xaxis.set_minor_locator(MultipleLocator(10))
 ax1.yaxis.set_major_locator(MultipleLocator(20))
 ax1.yaxis.set_minor_locator(MultipleLocator(10))
+ax1.set_title("AIA 171 \u212B, 16:36:35")
 
-plt.title("AIA 171 \u212B, 17:26:36")
+ax2.imshow(np.log2(im1712),origin='lower',extent=extent,cmap=aiacmap,vmax=12)
+ax2.imshow(new_pref1,origin='lower',cmap=prefcolors, extent=extent)
+ax2.contour(conts, origin='lower', levels=[0.4], extent=extent, cmap=contourcolors)
+ax2.contour(footplt/np.max(footplt),extent=extent,origin='lower',levels=[0.55],cmap=contourcolors,linestyles="--")
+ax2.set_xlabel("Solar X [arcsec]")
+ax2.xaxis.set_major_locator(MultipleLocator(20))
+ax2.xaxis.set_minor_locator(MultipleLocator(10))
+ax2.yaxis.set_major_locator(MultipleLocator(20))
+ax2.yaxis.set_minor_locator(MultipleLocator(10))
+ax2.set_title("AIA 171 \u212B, 17:26:36")
 plt.show()
-plt.savefig("combine.pdf",dpi=400,bbox_inches='tight')
