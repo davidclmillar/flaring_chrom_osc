@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as clr
 from matplotlib import cm
-import kappa_fitting
+import kappa_fitting as kappa_fitting
 plt.rcParams["font.family"] = "serif"
 plt.rcParams["font.size"] = 14
 import pickle
@@ -13,6 +13,7 @@ from matplotlib import colors
 from matplotlib import gridspec
 from astropy.io import fits
 import matplotlib.ticker as ticker
+
 # get the bottom left of images x and y coords
 hdu = fits.open("crisp_l2_20140906_152724_8542_r00470.fits")
 header = hdu[0].header
@@ -23,12 +24,12 @@ print(bl_x,bl_y)
 
 
 # ---- set up contours  ---- #
-one = pickle.load(open("pref_ca8542_12_post.p","rb"))
+one = pickle.load(open("../preferred_crisp_all_bump/pref_ca8542_12_post.p","rb"))
 
-cont = np.load("cube_wl_00.npy")
+cont = np.load("cube_ca8542_00_post_0.1res.npy")
 cont = cont[0,:,:]
 cont = cont/np.max(cont)
-cmap = colors.ListedColormap([clrs[0],clrs[4],clrs[8]])
+cmap = colors.ListedColormap([clrs[0],clrs[1],clrs[9]])
 
 contourcolors = colors.ListedColormap(['w'])
 levels = np.array([0.4,0.75])
@@ -37,6 +38,23 @@ conts = np.ones_like(cont)
 conts[cont<levels[0]]=0
 conts[cont>levels[1]]=2
 conts[one==0]=np.nan
+
+#  ----- flare feet contours - added 20201202 ----- #
+
+contf = np.load("ca8542_12_post.npy")
+contf = contf[0,:,:]
+contf = contf/np.max(contf)
+#cmap = colors.ListedColormap([clrs[0],clrs[4],clrs[8]])
+
+footcolors = colors.ListedColormap(clrs[6])
+#levelsf = np.array([0.75])
+
+#contsf = np.ones_like(contf)
+#contsf[contf<levels[0]]=0
+#contsf[contf>levels[1]]=2
+contf[one==0]=np.nan
+
+
 
 line="Halpha"
 time = 'post'
@@ -51,7 +69,7 @@ elif line=="Halpha":
     rows,cols=2,5
     d_wl = 0.2
     wl0 = 7
-    title = "H-alpha %s-impulsive, preferred models"%(time)
+    title = "H\u03B1 %s-impulsive, preferred models"%(time)
 # ---- multiple plots on a gridspec ---- #
 sizefactor = 3
 # - set up figure and grids
@@ -63,12 +81,13 @@ gs1.tight_layout(f, renderer=None, pad=1, h_pad=1, w_pad=1)
 clip_size = 5
 scale = 0.57 # arcsec per pixel
 conts = conts[clip_size:-clip_size,clip_size:-clip_size]
+contf = contf[clip_size:-clip_size,clip_size:-clip_size]
 
 # loop through our wls
 for a in range(rows*cols):
     wl = wls[a]
     ax1 = plt.subplot(gs1[a])
-    path = "folder/pref_%s_%s_%s.p"%(line,str(wl).zfill(2),time)
+    path = "../preferred_crisp_all_bump/pref_%s_%s_%s.p"%(line,str(wl).zfill(2),time)
 
     pref = pickle.load(open(path,"rb"))
     pref[pref==0]=np.nan
@@ -83,6 +102,7 @@ for a in range(rows*cols):
     # add a new plot to gridspec
     im = plt.imshow(pref,origin='lower',cmap=cmap,extent=extent)
     plt.contour(conts,origin='lower',levels=[0,1,2,3],cmap=contourcolors,linewidths=(1,0.1,0.1,0.1),linestyles=[':','-'],extent=extent,alpha=0.7)
+    plt.contourf(contf,extent=extent,origin='lower',levels=[0.55,1],cmap=footcolors,alpha=0.5)
     plt.axis('on')
     # set up ticks
     k = cols*(rows - 1)- 1
@@ -143,10 +163,5 @@ deltac = (upper-lower)/(2*(N-1))
 mapper.set_array(np.linspace(lower-deltac,upper+deltac,10)) #<-- the 10 here is pretty arbitrary
 clb = f.colorbar(mapper, shrink=0.19, cax=cax,ticks=[1,2,3])
 clb.ax.set_yticklabels(['M1','M2','M3'])
-clb.ax.tick_params(size=0)#rotation=270,size=0)
-#plt.show()
-
-
-
-
-plt.savefig("preferred_%s_%s.pdf"%(line,time),dpi=400,bbox_inches='tight')
+clb.ax.tick_params(size=0)
+plt.show()
